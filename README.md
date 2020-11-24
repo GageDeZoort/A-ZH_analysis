@@ -41,3 +41,13 @@ Jobs are submitted to the Condor cluster following examples listed in the [USCMS
 
 ## Pileup Re-weighting
 [Utilities for Accessing Pileup Information for Data](https://twiki.cern.ch/twiki/bin/view/CMS/PileupJSONFileforData)
+
+## Columnar Analysis
+This framework uses a number of tools developed for columnar analysis, which views particle physics datasets as matrices with columns corresponding to variables of interest (as opposed to event-by-event conceptualization). Some key resources used to develop this framework include:
+
+- [Uproot4]() and [Awkward1](https://github.com/scikit-hep/awkward-1.0)
+  - [PyHEP 2020 Tutorial](https://mybinder.org/v2/gh/jpivarski/2020-07-13-pyhep2020-tutorial.git/1.1?urlpath=lab/tree/tutorial.ipynb)
+  - [JLab 2020 Tutorial](https://github.com/jpivarski-talks/2020-04-08-eic-jlab#readme)
+- [Boost Histogram](https://github.com/scikit-hep/boost-histogram) and Hist (brand new, alpha release)
+  - [PyHEP 2020 Tutorial](https://indico.cern.ch/event/882824/contributions/3931299/)
+- [MPL-HEP](https://github.com/scikit-hep/mplhep)
