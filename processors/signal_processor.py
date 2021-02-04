@@ -10,6 +10,7 @@ import mplhep as hep
 import awkward1 as ak
 import pandas as pd
 import uproot
+import ROOT
 
 from coffea import hist, processor
 from coffea.analysis_objects import JaggedCandidateArray
@@ -22,6 +23,15 @@ class SignalProcessor(processor.ProcessorABC):
                  checklist=pd.DataFrame([]),
                  sample_list_dir="../sample_lists"):
 
+        # load in fastmtt
+        fastmtt_dir = '../svfit/fastmtt/'
+        for basename in ['MeasuredTauLepton', 'svFitAuxFunctions', 'FastMTT']:
+            path = fastmtt_dir + basename
+            if os.path.isfile("{0:s}_cc.so".format(path)):
+                ROOT.gInterpreter.ProcessLine(".L {0:s}_cc.so".format(path))
+            else:
+                ROOT.gInterpreter.ProcessLine(".L {0:s}.cc++".format(path))
+        
         # customize the 4l final states considered
         if categories == 'all':
             self.categories = {1: 'eeet', 2: 'eemt', 3: 'eett', 4: 'eeem',
@@ -68,7 +78,9 @@ class SignalProcessor(processor.ProcessorABC):
         mll_axis = hist.Bin("mll", "$m(l_1,l_2)$ [GeV]", 22, 40, 200)
         mtt_axis = hist.Bin("mtt", "$m(t_1,t_2)$ [GeV]", 40, 0, 400)
         m4l_axis = hist.Bin("m4l", "$m(l_1,l_2,t_1,t_2)$ [GeV]", 60, 0, 600)
-    
+        msv_axis = hist.Bin("msv", "$m_{sv}(l_1, l_2, t_1, t_2)$ [GeV]", 40, 0, 400)
+        mA_axis  = hist.Bin("mA", "$m_A$ [GeV]", 60, 0, 600)
+
         nbtag_axis = hist.Bin("nbtag", "$n_{btag}$", 5, 0, 5)
         njets_axis = hist.Bin("njets", "$n_{jets}$", 5, 0, 5)
         jpt1_axis = hist.Bin("jpt1", "$p_T(j_1)$ [GeV]", 20, 0, 200)
@@ -125,6 +137,8 @@ class SignalProcessor(processor.ProcessorABC):
             "mll":   hist.Hist("Events", dataset_axis, category_axis, mll_axis),
             "mtt":   hist.Hist("Events", dataset_axis, category_axis, mtt_axis),
             "m4l":   hist.Hist("Events", dataset_axis, category_axis, m4l_axis),
+            "msv":   hist.Hist("Events", dataset_axis, category_axis, msv_axis),
+            "mA":    hist.Hist("Events", dataset_axis, category_axis, mA_axis),
             "nbtag": hist.Hist("Events", dataset_axis, category_axis, nbtag_axis),
             "njets": hist.Hist("Events", dataset_axis, category_axis, njets_axis),
             
@@ -365,6 +379,89 @@ class SignalProcessor(processor.ProcessorABC):
                               N_sync = self.check_events(self.evt_ids[lltt.counts>0]))
         return mll, mtt, m4l
 
+    def run_fastmtt(self, lltt, met, category, cutflow=False):        
+        
+        # choose the correct lepton mass
+        ele_mass, mu_mass = 0.511*10**-3, 0.105
+        l_mass = ele_mass if category[:2] == 'ee' else mu_mass
+        
+        # flatten the final state leptons, assign to 4-vector arrays
+        l1_p4_array = TLorentzVectorArray.from_ptetaphim(lltt.i0.pt.flatten(), 
+                                                         lltt.i0.eta.flatten(), 
+                                                         lltt.i0.phi.flatten(), 
+                                                         l_mass*np.ones(len(lltt)))
+        l2_p4_array = TLorentzVectorArray.from_ptetaphim(lltt.i1.pt.flatten(), 
+                                                         lltt.i1.eta.flatten(), 
+                                                         lltt.i1.phi.flatten(), 
+                                                         l_mass*np.ones(len(lltt)))
+        
+        # choose the correct tau decay modes
+        e_decay = ROOT.MeasuredTauLepton.kTauToElecDecay
+        m_decay  = ROOT.MeasuredTauLepton.kTauToMuDecay
+        had_decay = ROOT.MeasuredTauLepton.kTauToHadDecay
+        if (category[2:]=='et'): t1_decay, t2_decay = e_decay, had_decay
+        if (category[2:]=='em'): t1_decay, t2_decay = e_decay, m_decay
+        if (category[2:]=='mt'): t1_decay, t2_decay = m_decay, had_decay
+        if (category[2:]=='tt'): t1_decay, t2_decay = had_decay, had_decay
+
+        # flatten the final state taus, assign to 4-vector arrays
+        t1_p4_array = TLorentzVectorArray.from_ptetaphim(lltt.i2.pt.flatten(), 
+                                                         lltt.i2.eta.flatten(),
+                                                         lltt.i2.phi.flatten(), 
+                                                         lltt.i2.mass.flatten())
+        t2_p4_array = TLorentzVectorArray.from_ptetaphim(lltt.i3.pt.flatten(), 
+                                                         lltt.i3.eta.flatten(),
+                                                         lltt.i3.phi.flatten(), 
+                                                         lltt.i3.mass.flatten())
+        
+        # flatten MET arrays 
+        metx = met.pt*np.cos(met.phi).flatten() 
+        mety = met.pt*np.sin(met.phi).flatten()
+        metcov00, metcov11 = met.covXX.flatten(), met.covYY.flatten()
+        metcov01, metcov10 = met.covXY.flatten(), met.covXY.flatten()
+
+        # loop to calculate A mass
+        N = len(t1_p4_array)
+        tt_masses, A_masses = np.zeros(N), np.zeros(N)
+        for i in range(N):
+
+            metcov = ROOT.TMatrixD(2,2)        
+            metcov[0][0], metcov[1][1] = metcov00[i], metcov11[i]
+            metcov[0][1], metcov[1][0] = metcov01[i], metcov10[i]
+        
+            tau_vector = ROOT.std.vector('MeasuredTauLepton')
+            tau_pair = tau_vector()
+            t1 = ROOT.MeasuredTauLepton(t1_decay, 
+                                        t1_p4_array[i].pt,
+                                        t1_p4_array[i].eta,
+                                        t1_p4_array[i].phi,
+                                        t1_p4_array[i].mass)
+            t2 = ROOT.MeasuredTauLepton(t2_decay, 
+                                        t2_p4_array[i].pt,
+                                        t2_p4_array[i].eta,
+                                        t2_p4_array[i].phi,
+                                        t2_p4_array[i].mass)
+            tau_pair.push_back(t1)
+            tau_pair.push_back(t2)
+
+            # run SVfit algorithm
+            fastmtt = ROOT.FastMTT()
+            fastmtt.run(tau_pair, metx[i], mety[i], metcov)
+            best_p4 = fastmtt.getBestP4()
+            tt_p4 = ROOT.TLorentzVector()
+            tt_p4.SetPtEtaPhiM(best_p4.Pt(), best_p4.Eta(),
+                               best_p4.Phi(), best_p4.M())
+            tt_masses[i] = tt_p4.M()
+            l1, l2 = ROOT.TLorentzVector(), ROOT.TLorentzVector()
+            l1.SetPtEtaPhiM(l1_p4_array[i].pt, l1_p4_array[i].eta,
+                            l1_p4_array[i].phi, l1_p4_array[i].mass)
+            l2.SetPtEtaPhiM(l2_p4_array[i].pt, l2_p4_array[i].eta,
+                            l2_p4_array[i].phi, l2_p4_array[i].mass)
+            A_p4 = (l1 + l2 + tt_p4)
+            A_masses[i] = A_p4.M()
+            
+        return tt_masses, A_masses
+
     ###############
     ## PROCESSOR ##
     ############### 
@@ -476,10 +573,11 @@ class SignalProcessor(processor.ProcessorABC):
 
             # take only valid final states
             self.evt_ids = self.evt_ids[lltt.counts>0]
+            met = met[lltt.counts>0]
             lltt = lltt[lltt.counts>0]
             mll, mtt, m4l = self.get_masses(lltt, cutflow=True)
-            
-            
+            msv, mA = self.run_fastmtt(lltt, met, category)
+
             #################
             ## FILL HISTOS ##
             #################
@@ -538,7 +636,9 @@ class SignalProcessor(processor.ProcessorABC):
             self.output["mll"].fill(dataset=self.dataset, category=category, mll=mll.flatten(), weight=sample_weight*np.ones(len(mll.flatten())))
             self.output["mtt"].fill(dataset=self.dataset, category=category, mtt=mtt.flatten(), weight=sample_weight*np.ones(len(mtt.flatten())))
             self.output["m4l"].fill(dataset=self.dataset, category=category, m4l=m4l.flatten(), weight=sample_weight*np.ones(len(m4l.flatten())))
-        
+            self.output["msv"].fill(dataset=self.dataset, category=category, msv=msv.flatten(), weight=sample_weight*np.ones(len(msv.flatten())))
+            self.output["mA"].fill(dataset=self.dataset, category=category, mA=mA.flatten(),weight=sample_weight*np.ones(len(mA.flatten())))
+
             #nbtag = good_bjets.counts.flatten()
             #output["nbtag"].fill(dataset=dataset, category=category, nbtag=nbtag, weight=sample_weight*np.ones(len(nbtag)))
             #njets = good_jets.counts.flatten()
