@@ -17,9 +17,17 @@ indir = "dataset_lists_MC/"
 infile = open(indir+"MCsamples_{0}_paper.csv".format(args.year))
 sample_dict = {line.split(',')[0]: line.split(',')[6].strip('\n') for line in infile}
 
+# list sample properties
+infile = open(indir+"MCsamples_{0}_paper.csv".format(args.year))
+sample_properties = {line.split(',')[0]: [line.split(',')[1].strip(), line.split(',')[2].strip(),
+                                          line.split(',')[3].strip(), line.split(',')[4].strip()] 
+                     for line in infile}
+
 # loop over all samples
 outdir = args.outdir
-outfile = open(outdir+"{0}_{1}_samples.yaml".format(args.name, args.year), "w+")
+outfile = open(outdir+"/{0}_{1}_samples.yaml".format(args.name, args.year), "w+")
+properties_outfile = open(outdir+"/{0}_{1}_properties.yaml".format(args.name, args.year), "w+")
+
 for name, loc in sample_dict.items():
     if args.name != '':
         if args.name not in name: continue
@@ -31,6 +39,13 @@ for name, loc in sample_dict.items():
     sample = subprocess.check_output(command, shell=True).decode().split('\n')[0]
     outfile.write("{0}_{1}:\n".format(name, args.year))
 
+    # fill properties file
+    properties = sample_properties[name]
+    properties_outfile.write("{0}_{1}:\n".format(name, args.year))
+    properties_outfile.write("    group: {0}\n".format(properties[0]))
+    properties_outfile.write("    xsec: {0}\n".format(properties[1]))
+    properties_outfile.write("    total_weight: {0}\n".format(properties[3]))
+    
     # list all files in sample
     print('...sample:', sample)
     #print(" {0}".format(sample))
@@ -51,5 +66,5 @@ for name, loc in sample_dict.items():
         outfile.write("  - " + sample_file_loc.strip('\n').replace('-site','') + "\n")
 
 outfile.close()
-
+properties_outfile.close()
 
