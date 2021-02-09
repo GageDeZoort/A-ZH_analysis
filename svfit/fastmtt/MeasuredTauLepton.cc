@@ -57,8 +57,8 @@ MeasuredTauLepton::MeasuredTauLepton(int type, double pt, double eta, double phi
       std::cerr << "Error: Invalid type " << type_ << " declared for leg: Pt = " << pt_ << ", eta = " << eta_ << ", phi = " << phi_ << ", mass = " << mass_ << " !!" << std::endl;
       assert(0);
     }
-    std::cerr << "Warning: " << type_string << " declared for leg: Pt = " << pt_ << ", eta = " << eta_ << ", phi = " << phi_ << ", mass = " << mass_ << " !!" << std::endl;
-    std::cerr << " (mass expected in the range = " << minVisMass << ".." << maxVisMass << ")" << std::endl;
+    //std::cerr << "Warning: " << type_string << " declared for leg: Pt = " << pt_ << ", eta = " << eta_ << ", phi = " << phi_ << ", mass = " << mass_ << " !!" << std::endl;
+    //std::cerr << " (mass expected in the range = " << minVisMass << ".." << maxVisMass << ")" << std::endl;
   }
   if ( preciseVisMass_ < minVisMass ) preciseVisMass_ = minVisMass;
   if ( preciseVisMass_ > maxVisMass ) preciseVisMass_ = maxVisMass;

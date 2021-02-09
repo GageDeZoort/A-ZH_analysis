@@ -169,7 +169,7 @@ class SignalProcessor(processor.ProcessorABC):
         if N_sync > -1:
             self.output['cutflow_sync'][self.dataset][label] += N_sync
 
-    def trigger_selections(self, HLT, year, sync=False):
+    def trigger_path(self, HLT, year, sync=False):
 
         if (sync):
             if (year in ['2017', '2018']): return HLT.Ele35_WPTight_Gsf
@@ -331,7 +331,26 @@ class SignalProcessor(processor.ProcessorABC):
         if cutflow: self.fill_cutflow('Z cand', lltt[lltt.counts>0].shape[0],
                                       N_sync=self.check_events(self.evt_ids[lltt.counts>0]))
         return lltt
-        
+
+    def trigger_filter(self, lltt, trig_obj, category, cutflow=False):
+        lltt_trig = lltt.cross(trig_obj)
+        l1_dR_matched = (lltt_trig.i0.delta_r(lltt_trig.i4) < 0.5) 
+        l1_matches = lltt_trig[(l1_dR_matched) & 
+                               (lltt_trig.i0.pt > 36) &
+                               (abs(lltt_trig.i0.eta) < 2.1)]
+        l2_dR_matched = (lltt_trig.i1.delta_r(lltt_trig.i4) < 0.5)
+        l2_matches = lltt_trig[(l2_dR_matched) & 
+                               (lltt_trig.i1.pt > 36) & 
+                               (abs(lltt_trig.i1.eta) < 2.1)]
+        trigger_match = ((l1_matches.counts > 0) | (l2_matches.counts > 0))
+        lltt = lltt[trigger_match]
+        self.evt_ids = self.evt_ids[trigger_match]
+        self.met = self.met[trigger_match]
+
+        if cutflow: self.fill_cutflow('trigger filter', lltt[lltt.counts>0].shape[0],
+                                      N_sync=self.check_events(self.evt_ids[lltt.counts>0]))
+        return lltt
+
     def build_ditau_cand(self, lltt, category, cutflow=False):
         
         #lltt = lltt[(lltt.i2.charge * lltt.i3.charge == -1)]
@@ -506,14 +525,14 @@ class SignalProcessor(processor.ProcessorABC):
                       flags.EcalDeadCellTriggerPrimitiveFilter &
                       flags.BadPFMuonFilter & flags.ecalBadCalibFilter)
 
-        # calculate the trigger_filter
+        # calculate the trigger_path
         HLT = events.HLT
-        trigger_filter = self.trigger_selections(HLT, year, sync=self.sync)
+        trigger_path = self.trigger_path(HLT, year, sync=self.sync)
         
         # apply filters
-        events = events[MET_filter & trigger_filter]
-        self.event_ids = self.event_ids[MET_filter & trigger_filter]
-        self.fill_cutflow('trigger filter', len(events),
+        events = events[MET_filter & trigger_path]
+        self.event_ids = self.event_ids[MET_filter & trigger_path]
+        self.fill_cutflow('trigger path', len(events),
                           N_sync = self.check_events(self.event_ids))
 
         ######################
@@ -526,6 +545,7 @@ class SignalProcessor(processor.ProcessorABC):
         loose_jets = self.loose_jet_selections(events.Jet, year)
         loose_bjets = self.loose_bjet_selections(events.Jet, year)
         MET = events.MET
+        trigger_objects = events.TrigObj
 
         # count electrons minus overlapped objects
         electron_counts = self.count_non_overlapped(loose_electrons)
@@ -546,7 +566,8 @@ class SignalProcessor(processor.ProcessorABC):
             # n_leptons veto 
             n_lepton_mask = self.n_lepton_veto(electron_counts, muon_counts, category)
             jets, bjets = loose_jets[n_lepton_mask], loose_bjets[n_lepton_mask]
-            met = MET[n_lepton_mask]
+            self.met = MET[n_lepton_mask]
+            trig_obj = trigger_objects[n_lepton_mask]
 
             # track event ids on a per-category basis
             self.evt_ids = self.event_ids[n_lepton_mask]
@@ -561,6 +582,7 @@ class SignalProcessor(processor.ProcessorABC):
             # build non-overlapped final state objects 
             lltt = self.dR_cut(ll.cross(tt), category, cutflow=True)
             lltt = self.build_Z_cand(lltt, category, cutflow=True)
+            lltt = self.trigger_filter(lltt, trig_obj, category, cutflow=True)
             lltt = self.build_ditau_cand(lltt, category, cutflow=True)
 
             # apply b jet veto
@@ -573,10 +595,10 @@ class SignalProcessor(processor.ProcessorABC):
 
             # take only valid final states
             self.evt_ids = self.evt_ids[lltt.counts>0]
-            met = met[lltt.counts>0]
+            self.met = self.met[lltt.counts>0]
             lltt = lltt[lltt.counts>0]
             mll, mtt, m4l = self.get_masses(lltt, cutflow=True)
-            msv, mA = self.run_fastmtt(lltt, met, category)
+            msv, mA = self.run_fastmtt(lltt, self.met, category)
 
             #################
             ## FILL HISTOS ##
@@ -610,12 +632,12 @@ class SignalProcessor(processor.ProcessorABC):
             self.output["t1_mass"] += processor.column_accumulator(ak.to_numpy(mass3))
             self.output["t2_mass"] += processor.column_accumulator(ak.to_numpy(mass4))
             
-            self.output["METx"] += processor.column_accumulator(ak.to_numpy((met.pt*np.cos(met.phi)).flatten()))
-            self.output["METy"] += processor.column_accumulator(ak.to_numpy((met.pt*np.sin(met.phi)).flatten()))
-            self.output["METcov_00"] += processor.column_accumulator(ak.to_numpy(met.covXX.flatten()))
-            self.output["METcov_01"] += processor.column_accumulator(ak.to_numpy(met.covXY.flatten()))
-            self.output["METcov_10"] += processor.column_accumulator(ak.to_numpy(met.covXY.flatten()))
-            self.output["METcov_11"] += processor.column_accumulator(ak.to_numpy(met.covYY.flatten()))
+            self.output["METx"] += processor.column_accumulator(ak.to_numpy((self.met.pt*np.cos(self.met.phi)).flatten()))
+            self.output["METy"] += processor.column_accumulator(ak.to_numpy((self.met.pt*np.sin(self.met.phi)).flatten()))
+            self.output["METcov_00"] += processor.column_accumulator(ak.to_numpy(self.met.covXX.flatten()))
+            self.output["METcov_01"] += processor.column_accumulator(ak.to_numpy(self.met.covXY.flatten()))
+            self.output["METcov_10"] += processor.column_accumulator(ak.to_numpy(self.met.covXY.flatten()))
+            self.output["METcov_11"] += processor.column_accumulator(ak.to_numpy(self.met.covYY.flatten()))
             self.output["category"] += processor.column_accumulator(c * np.ones(len(pt1)) )
 
             self.output["pt1"].fill(dataset=self.dataset, category=category, pt1=pt1, weight=sample_weight*np.ones(len(pt1)))
