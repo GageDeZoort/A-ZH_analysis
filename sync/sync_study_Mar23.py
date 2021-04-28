@@ -1,0 +1,55 @@
+import sys
+from time import time
+
+import yaml
+import pandas as pd
+import numpy as np
+from coffea import processor, util
+
+sys.path.append('../')
+from processors.signal_processor import SignalProcessor
+
+with open("../sample_lists/samples_sync/AToZhToLLTauTau_M220_2018_samples.yaml", 'r') as stream:
+    try:
+        fileset = yaml.safe_load(stream)
+    except yaml.YAMLError as exc:
+        print(exc)
+
+checkfile = open('sync_outputs/desy_all.csv')
+checklist = pd.read_csv(checkfile)
+print(checklist.shape)
+
+t0 = time()
+out = processor.run_uproot_job (
+    fileset,
+    treename='Events',
+    processor_instance=SignalProcessor(sync=True, categories='all',
+                                       checklist=checklist),
+    executor=processor.futures_executor,
+    executor_args={'workers':20, 'flatten': True, "nano": True},
+    #chunksize=1000,
+    #maxchunks=50,
+)
+
+print(out['cutflow_sync'].items())
+print(out['cutflow'].items())
+
+lumi = np.array(out['lumi'].value, dtype=int)
+run = np.array(out['run'].value, dtype=int)
+evt = np.array(out['evt'].value, dtype=int)
+cat = np.array(out['cat'].value, dtype=str)
+
+if (len(sys.argv)==1):
+    filename = 'sync_out.csv'
+else:
+    filename = sys.argv[1]
+
+sync_file = open(filename, 'w')
+sync_file.write('run,lumi,evtid,cat\n')
+for i, e in enumerate(evt):
+   sync_file.write('{0:d},{1:d},{2:d},{3}\n'
+                   .format(run[i], lumi[i], evt[i], cat[i]))
+sync_file.close()
+
+print("Processing took {0} s".format(time()-t0))
+util.save(out, 'coffea_output/mtt_0p2GeV.coffea')

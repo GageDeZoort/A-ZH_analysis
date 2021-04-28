@@ -93,7 +93,7 @@ class FastMTT {
 
   ///Run fastMTT algorithm for given input
   void run(const std::vector<classic_svFit::MeasuredTauLepton>&,
-	   const double &, const double &, const TMatrixD&);
+	   const double &, const double &, const TMatrixD&, bool);
 
   ///Set likelihood shape parameters.
   void setLikelihoodParams(const std::vector<double> & aPars);
@@ -139,7 +139,7 @@ class FastMTT {
   ///Run a scan over x1 and x2 [0,1] rectangle for given inputs.
   ///Results are stored in internal variables accesed by
   ///relevant get methods.
-  void scan();
+  void scan(bool);
 
    // Minimizer types and algorithms.
    // minimizerName               minimizerAlgorithm

@@ -44,7 +44,8 @@ class SignalProcessor(processor.ProcessorABC):
         self.sync = sync
         self.mode = 'sync' if self.sync else 'all'
         self.checklist = checklist # failing sync events to double-check
-
+        self.princeton_exclusive = np.array([248633, 250132, 250374, 256311, 2568862, 259595, 395373, 488027, 490292, 491592])
+        
         # location of the samples, usually differentiates sync vs. all
         self.sample_list_dir = sample_list_dir
         
@@ -59,27 +60,16 @@ class SignalProcessor(processor.ProcessorABC):
         # histogram axes specify histo names, labels, and bin shapes
         category_axis = hist.Cat("category", "")
         dataset_axis = hist.Cat("dataset", "")
+        particle_axis = hist.Cat("particle", "")
         
-        pt1_axis = hist.Bin("pt1", "$p_T(l_1)$ [GeV]", 20, 0, 200)
-        pt2_axis = hist.Bin("pt2", "$p_T(l_2)$ [GeV]", 20, 0, 200)
-        pt3_axis = hist.Bin("pt3", "$p_T(t_1)$ [GeV]", 20, 0, 200)
-        pt4_axis = hist.Bin("pt4", "$p_T(t_2)$ [GeV]", 20, 0, 200)
+        pt_axis = hist.Bin("pt", "$p_T$ [GeV]", 20, 0, 200)        
+        eta_axis = hist.Bin("eta", "$\eta$ [GeV]", 10, -5, 5)        
+        phi_axis = hist.Bin("phi", "$\phi$ [GeV]", 10, -np.pi, np.pi)
         
-        eta1_axis = hist.Bin("eta1", "$\eta (l_1)$ [GeV]", 10, -5, 5)
-        eta2_axis = hist.Bin("eta2", "$\eta (l_2)$ [GeV]", 10, -5, 5)
-        eta3_axis = hist.Bin("eta3", "$\eta (t_1)$ [GeV]", 10, -5, 5)
-        eta4_axis = hist.Bin("eta4", "$\eta (t_2)$ [GeV]", 10, -5, 5)
-        
-        phi1_axis = hist.Bin("phi1", "$\phi (l_1)$ [GeV]", 10, -np.pi, np.pi)
-        phi2_axis = hist.Bin("phi2", "$\phi (l_2)$ [GeV]", 10, -np.pi, np.pi)
-        phi3_axis = hist.Bin("phi3", "$\phi (t_1)$ [GeV]", 10, -np.pi, np.pi)
-        phi4_axis = hist.Bin("phi4", "$\phi (t_2)$ [GeV]", 10, -np.pi, np.pi)
-        
-        mll_axis = hist.Bin("mll", "$m(l_1,l_2)$ [GeV]", 22, 40, 200)
-        mtt_axis = hist.Bin("mtt", "$m(t_1,t_2)$ [GeV]", 40, 0, 400)
-        m4l_axis = hist.Bin("m4l", "$m(l_1,l_2,t_1,t_2)$ [GeV]", 60, 0, 600)
-        msv_axis = hist.Bin("msv", "$m_{sv}(l_1, l_2, t_1, t_2)$ [GeV]", 40, 0, 400)
-        mA_axis  = hist.Bin("mA", "$m_A$ [GeV]", 60, 0, 600)
+        mll_axis = hist.Bin("mll", "$m(l_1,l_2)$ [GeV]", 40, 0, 200)
+        mtt_axis = hist.Bin("mtt", "$m(t_1,t_2)$ [GeV]", 30, 0, 300)
+        mA_axis  = hist.Bin("mA", "$m_A$ [GeV]", 40, 0, 400)
+        mass_type_axis = hist.Cat("mass_type", "")
 
         nbtag_axis = hist.Bin("nbtag", "$n_{btag}$", 5, 0, 5)
         njets_axis = hist.Bin("njets", "$n_{jets}$", 5, 0, 5)
@@ -97,48 +87,18 @@ class SignalProcessor(processor.ProcessorABC):
             "evt": processor.column_accumulator(np.array([])),
             "lumi": processor.column_accumulator(np.array([])),
             "run": processor.column_accumulator(np.array([])),
-            
-            # SVfit output
-            "l1_pt": processor.column_accumulator(np.array([])),     
-            "l2_pt": processor.column_accumulator(np.array([])),
-            "t1_pt": processor.column_accumulator(np.array([])), 
-            "t2_pt": processor.column_accumulator(np.array([])),
-            "l1_eta": processor.column_accumulator(np.array([])),
-            "l2_eta": processor.column_accumulator(np.array([])),
-            "t1_eta": processor.column_accumulator(np.array([])),
-            "t2_eta": processor.column_accumulator(np.array([])),
-            "t1_mass": processor.column_accumulator(np.array([])),
-            "t2_mass": processor.column_accumulator(np.array([])),
-            "l1_phi": processor.column_accumulator(np.array([])),
-            "l2_phi": processor.column_accumulator(np.array([])),
-            "t1_phi": processor.column_accumulator(np.array([])),
-            "t2_phi": processor.column_accumulator(np.array([])),
-            "METx": processor.column_accumulator(np.array([])),  
-            "METy": processor.column_accumulator(np.array([])),
-            "METcov_00": processor.column_accumulator(np.array([])), 
-            "METcov_01": processor.column_accumulator(np.array([])),
-            "METcov_10": processor.column_accumulator(np.array([])),
-            "METcov_11": processor.column_accumulator(np.array([])),
-            "category": processor.column_accumulator(np.array([])),
+            "cat": processor.column_accumulator(np.array([])),
+            "mll_array": processor.column_accumulator(np.array([])),
+            "msv_cons_array": processor.column_accumulator(np.array([])),
+            "m_mumu": processor.column_accumulator(np.array([])), 
 
             # histograms
-            "pt1":   hist.Hist("Events", dataset_axis, category_axis, pt1_axis),
-            "pt2":   hist.Hist("Events", dataset_axis, category_axis, pt2_axis),
-            "pt3":   hist.Hist("Events", dataset_axis, category_axis, pt3_axis),
-            "pt4":   hist.Hist("Events", dataset_axis, category_axis, pt4_axis),
-            "eta1":  hist.Hist("Events", dataset_axis, category_axis, eta1_axis),
-            "eta2":  hist.Hist("Events", dataset_axis, category_axis, eta2_axis),
-            "eta3":  hist.Hist("Events", dataset_axis, category_axis, eta3_axis),
-            "eta4":  hist.Hist("Events", dataset_axis, category_axis, eta4_axis),
-            "phi1":  hist.Hist("Events", dataset_axis, category_axis, phi1_axis),
-            "phi2":  hist.Hist("Events", dataset_axis, category_axis, phi2_axis),
-            "phi3":  hist.Hist("Events", dataset_axis, category_axis, phi3_axis),
-            "phi4":  hist.Hist("Events", dataset_axis, category_axis, phi4_axis),
-            "mll":   hist.Hist("Events", dataset_axis, category_axis, mll_axis),
-            "mtt":   hist.Hist("Events", dataset_axis, category_axis, mtt_axis),
-            "m4l":   hist.Hist("Events", dataset_axis, category_axis, m4l_axis),
-            "msv":   hist.Hist("Events", dataset_axis, category_axis, msv_axis),
-            "mA":    hist.Hist("Events", dataset_axis, category_axis, mA_axis),
+            "pt": hist.Hist("Events", dataset_axis, category_axis, pt_axis, particle_axis),
+            "eta": hist.Hist("Events", dataset_axis, category_axis, eta_axis, particle_axis),
+            "phi": hist.Hist("Events", dataset_axis, category_axis, phi_axis, particle_axis),
+            "mll": hist.Hist("Events", dataset_axis, category_axis, mll_axis),
+            "mtt": hist.Hist("Events", dataset_axis, category_axis, mtt_axis, mass_type_axis),
+            "m4l": hist.Hist("Events", dataset_axis, category_axis, mA_axis,  mass_type_axis),
             "nbtag": hist.Hist("Events", dataset_axis, category_axis, nbtag_axis),
             "njets": hist.Hist("Events", dataset_axis, category_axis, njets_axis),
             
@@ -155,13 +115,15 @@ class SignalProcessor(processor.ProcessorABC):
     def accumulator(self): 
         return self._accumulator
 
-    def check_events(self, evts):
+    def check_events(self, evts, output=True):
         if not self.sync: return 0
         n_matches = 0
+        
         for i, row in self.checklist.iterrows():
             n_matches += len(evts[(evts.run==row['run']) & 
                                   (evts.lumi==row['lumi']) &
                                   (evts.evt==row['evtid'])])
+
         return n_matches
 
     def fill_cutflow(self, label, N, N_sync=-1):
@@ -169,11 +131,15 @@ class SignalProcessor(processor.ProcessorABC):
         if N_sync > -1:
             self.output['cutflow_sync'][self.dataset][label] += N_sync
 
-    def trigger_path(self, HLT, year, sync=False):
+    def trigger_path(self, HLT, year, category, sync=False):
 
         if (sync):
-            if (year in ['2017', '2018']): return HLT.Ele35_WPTight_Gsf
-            if (year == '2016'): return HLT.Ele27_WPTight_Gsf
+            if (year in ['2017', '2018']): 
+                if (category[:2]=='ee'): 
+                    return HLT.Ele35_WPTight_Gsf
+                elif (category[:2]=='mm'): 
+                    return HLT.IsoMu27
+            elif (year == '2016'): return HLT.Ele27_WPTight_Gsf
 
         if (year == '2016'):
             good_single = (HLT.IsoMu22 | HLT.IsoMu22_eta2p1 | HLT.IsoTkMu22 |
@@ -194,12 +160,6 @@ class SignalProcessor(processor.ProcessorABC):
 
         return (good_single | good_double)
 
-    def print_taus(self, taus):
-        for i, tau in enumerate(taus):
-            print("tau{0}_pt: {1}".format(i, tau.pt))
-            print("tau{0}_VSe: {1}".format(i, tau.rawDeepTau2017v2p1VSe))
-            print("tau{0}_VSe: {1}".format(i, tau.idDeepTau2017v2p1VSe))
-
     def loose_tau_selections(self, taus, cutflow=False):
 
         self.fill_cutflow('initial taus', taus.shape[0],
@@ -210,7 +170,7 @@ class SignalProcessor(processor.ProcessorABC):
         loose_taus = loose_taus[(np.abs(loose_taus.eta) < 2.3)]
         self.fill_cutflow('tau eta', loose_taus.shape[0],
                           N_sync=self.check_events(self.event_ids[loose_taus.counts>0]))
-        loose_taus = loose_taus[(loose_taus.dz < 0.2)]
+        loose_taus = loose_taus[(np.abs(loose_taus.dz) < 0.2)]
         self.fill_cutflow('tau dz', loose_taus.shape[0],
                           N_sync=self.check_events(self.event_ids[loose_taus.counts>0]))
         loose_taus = loose_taus[(loose_taus.idDecayModeNewDMs == 1)]
@@ -219,8 +179,7 @@ class SignalProcessor(processor.ProcessorABC):
         loose_taus = loose_taus[((loose_taus.decayMode != 5) & (loose_taus.decayMode != 6))]
         self.fill_cutflow('tau decaymodes', loose_taus.shape[0],
                           N_sync=self.check_events(self.event_ids[loose_taus.counts>0]))
-        #(np.abs(taus.charge) == 1) &
-        loose_taus = loose_taus[(loose_taus.idDeepTau2017v2p1VSe > 0)]
+        loose_taus = loose_taus[(loose_taus.idDeepTau2017v2p1VSjet > 0)]
         self.fill_cutflow('tau vsjet', loose_taus.shape[0],
                           N_sync=self.check_events(self.event_ids[loose_taus.counts>0]))
         loose_taus = loose_taus[(loose_taus.idDeepTau2017v2p1VSmu > 0)] # Loose
@@ -240,11 +199,11 @@ class SignalProcessor(processor.ProcessorABC):
     def loose_muon_selections(self, muons, cutflow=False):
         loose_muons = muons[((muons.isTracker) | (muons.isGlobal)) & # DIFF
                             (muons.looseId | muons.mediumId | muons.tightId) &
-                            (muons.dxy < 0.045) &
-                            (muons.dz < 0.2) &
+                            (np.abs(muons.dxy) < 0.045) &
+                            (np.abs(muons.dz) < 0.2) &
                             (muons.pt > 10) &
-                            (np.abs(muons.eta) < 2.4)] # &
-        #                   (muons.pfRelIso04_all < 0.25)]
+                            (np.abs(muons.eta) < 2.4)]  #&
+                            #(muons.pfRelIso04_all < 0.25)]
         if cutflow: 
             enough_muons = (loose_muons.counts>0)
             self.fill_cutflow('loose muons', loose_muons[enough_muons].shape[0],
@@ -252,8 +211,8 @@ class SignalProcessor(processor.ProcessorABC):
         return loose_muons
             
     def loose_electron_selections(self, electrons, cutflow=False):
-        loose_electrons = electrons[(electrons.dxy < 0.045) &
-                                    (electrons.dz  < 0.2) &
+        loose_electrons = electrons[(np.abs(electrons.dxy) < 0.045) &
+                                    (np.abs(electrons.dz)  < 0.2) &
                                     (electrons.mvaFall17V2noIso_WP90 > 0.5) &
                                     (electrons.lostHits < 2) &
                                     (electrons.convVeto) &
@@ -292,7 +251,7 @@ class SignalProcessor(processor.ProcessorABC):
         ll = leptons.distincts()
         ll_dR = ll.i0.delta_r(ll.i1)
         ll_overlaps = (ll_dR < 0.3).sum()
-        return leptons.counts - ll_overlaps        
+        return leptons.counts #- ll_overlaps        
 
     def dR_cut(self, lltt, cat, cutflow=False):
         dR_cuts = { 'ee': 0.3, 'em': 0.3, 'mm': 0.3, 'me': 0.3,
@@ -303,6 +262,15 @@ class SignalProcessor(processor.ProcessorABC):
                     (lltt.i1.delta_r(lltt.i2) > dR_cuts[cat[1]+cat[2]]) &
                     (lltt.i1.delta_r(lltt.i3) > dR_cuts[cat[1]+cat[3]]) & 
                     (lltt.i2.delta_r(lltt.i3) > dR_cuts[cat[2]+cat[3]]) )
+        #print('cat[0]={},cat[1]={}'.format(cat[0],cat[1]),
+        #      '\n - dr: ', lltt.i0.delta_r(lltt.i1), 
+        #      '\n - dr_cut: ', dR_cuts[cat[0]+cat[1]],
+        #      '\n ==> ', (lltt.i0.delta_r(lltt.i1) > dR_cuts[cat[0]+cat[2]]))
+        #print('cat[2]={}, cat[3]={}'.format(cat[2], cat[3]),
+        #      '\n - dr: ', lltt.i2.delta_r(lltt.i3),
+        #      '\n - dr_cut: ', dR_cuts[cat[2]+cat[3]],
+        #      '\n ==> ', (lltt.i2.delta_r(lltt.i3) > dR_cuts[cat[2]+cat[3]]) )
+        
         lltt = lltt[dR_mask]
         if cutflow: self.fill_cutflow('dR overlap', lltt[lltt.counts>0].shape[0],
                                       N_sync=self.check_events(self.evt_ids[lltt.counts>0]))
@@ -333,16 +301,29 @@ class SignalProcessor(processor.ProcessorABC):
         return lltt
 
     def trigger_filter(self, lltt, trig_obj, category, cutflow=False):
+ 
         lltt_trig = lltt.cross(trig_obj)
-        l1_dR_matched = (lltt_trig.i0.delta_r(lltt_trig.i4) < 0.5) 
-        l1_matches = lltt_trig[(l1_dR_matched) & 
-                               (lltt_trig.i0.pt > 36) &
-                               (abs(lltt_trig.i0.eta) < 2.1)]
+        l1_dR_matched = (lltt_trig.i0.delta_r(lltt_trig.i4) < 0.5)
         l2_dR_matched = (lltt_trig.i1.delta_r(lltt_trig.i4) < 0.5)
-        l2_matches = lltt_trig[(l2_dR_matched) & 
-                               (lltt_trig.i1.pt > 36) & 
-                               (abs(lltt_trig.i1.eta) < 2.1)]
+        filter_bit = ((lltt_trig.i4.filterBits & 2) > 0)
+
+        if (category[:2] == 'ee'): 
+            pt_min, eta_max = 36, 2.1
+        if (category[:2] == 'mm'): 
+            pt_min, eta_max = 28, 2.1
+            filter_bit = ((filter_bit | ((lltt_trig.i4.filterBits & 8)) > 0)) 
+            
+        l1_matches = lltt_trig[((l1_dR_matched) & 
+                                (lltt_trig.i0.pt > pt_min) &
+                                filter_bit).astype(bool)]
+        l2_matches = lltt_trig[((l2_dR_matched) & 
+                                (lltt_trig.i1.pt > pt_min) & 
+                                filter_bit).astype(bool)]        
+
         trigger_match = ((l1_matches.counts > 0) | (l2_matches.counts > 0))
+        trigger_match_1 = l1_matches.counts > 0
+        trigger_match_2 = l2_matches.counts > 0
+
         lltt = lltt[trigger_match]
         self.evt_ids = self.evt_ids[trigger_match]
         self.met = self.met[trigger_match]
@@ -358,31 +339,30 @@ class SignalProcessor(processor.ProcessorABC):
         #                              N_sync = self.check_events(self.evt_ids[lltt.counts>0]))
 
         if (category[2:] == 'mt'):
-            lltt = lltt[(lltt.i3.idDeepTau2017v2p1VSmu > 7)]# & # Tight
+            lltt = lltt[(lltt.i3.idDeepTau2017v2p1VSmu > 7)] #  & # Tight
                         #(lltt.i2.pfRelIso04_all < 0.15) &
                         #((lltt.i2.pt + lltt.i3.pt) > 40)] # &
                         #(lltt.i3.idAntiMu > 2) &
                         #(lltt.i3.idDeepTau2017v2p1VSjet > 15)] # Medium
                                 
         elif (category[2:] == 'tt'):
-            lltt = lltt[(lltt.i2.charge * lltt.i3.charge == -1) &
-                        (lltt.i2.idDeepTau2017v2p1VSjet > 15) & # Medium
-                        (lltt.i3.idDeepTau2017v2p1VSjet > 15) & # Medium
-                        ((lltt.i2.pt + lltt.i3.pt) > 80)]
+            lltt = lltt#(lltt.i2.charge * lltt.i3.charge == -1) &
+                        #(lltt.i2.idDeepTau2017v2p1VSjet > 15) & # Medium
+                        #(lltt.i3.idDeepTau2017v2p1VSjet > 15) & # Medium
+                        #((lltt.i2.pt + lltt.i3.pt) > 80)]
         
         elif (category[2:] == 'et'):
-            lltt = lltt[(lltt.i2.mvaFall17V2noIso_WP80) &
-                        (lltt.i2.pfRelIso03_all < 0.15) & 
+            lltt = lltt[#(lltt.i2.mvaFall17V2noIso_WP80) &
+                        #(lltt.i2.pfRelIso03_all < 0.15) & 
                         #(lltt.i2.mvaFall17V2noIso_WP90) & # from ZH
-                        (lltt.i3.idDeepTau2017v2p1VSe > 31) & # Tight
-                        ((lltt.i2.pt + lltt.i3.pt) > 30)] 
+                        (lltt.i3.idDeepTau2017v2p1VSe > 31)] #& # Tight
+                        #((lltt.i2.pt + lltt.i3.pt) > 30)] 
         
         elif (category[2:] == 'em'):
-            lltt = lltt[(lltt.i2.mvaFall17V2noIso_WP80) & 
-                        #(lltt.i2.mvaFall17V2noIso_WP90) & # from ZH
-                        (lltt.i2.pfRelIso03_all < 0.15) &
-                        (lltt.i3.pfRelIso04_all < 0.15) &
-                        ((lltt.i2.pt + lltt.i3.pt) > 20)]
+            lltt = lltt#[#(lltt.i2.mvaFall17V2noIso_WP80)]# & 
+                        #(lltt.i2.pfRelIso03_all < 0.15) &
+                        #(lltt.i3.pfRelIso04_all < 0.15) &
+                        #((lltt.i2.pt + lltt.i3.pt) > 20)]
                     
         lltt = lltt[(lltt.i2.pt + lltt.i3.pt).argmax()]
         if cutflow: self.fill_cutflow('ditau cand', lltt[lltt.counts>0].shape[0],
@@ -441,7 +421,9 @@ class SignalProcessor(processor.ProcessorABC):
 
         # loop to calculate A mass
         N = len(t1_p4_array)
-        tt_masses, A_masses = np.zeros(N), np.zeros(N)
+        tt_corr_masses, tt_cons_masses = np.zeros(N), np.zeros(N)
+        A_corr_masses, A_cons_masses = np.zeros(N), np.zeros(N)
+
         for i in range(N):
 
             metcov = ROOT.TMatrixD(2,2)        
@@ -465,21 +447,122 @@ class SignalProcessor(processor.ProcessorABC):
 
             # run SVfit algorithm
             fastmtt = ROOT.FastMTT()
-            fastmtt.run(tau_pair, metx[i], mety[i], metcov)
-            best_p4 = fastmtt.getBestP4()
-            tt_p4 = ROOT.TLorentzVector()
-            tt_p4.SetPtEtaPhiM(best_p4.Pt(), best_p4.Eta(),
-                               best_p4.Phi(), best_p4.M())
-            tt_masses[i] = tt_p4.M()
+            fastmtt.run(tau_pair, metx[i], mety[i], metcov, False) # unconstrained
+            tt_corr = fastmtt.getBestP4()
+            tt_corr_p4 = ROOT.TLorentzVector()
+            tt_corr_p4.SetPtEtaPhiM(tt_corr.Pt(), tt_corr.Eta(),
+                                    tt_corr.Phi(), tt_corr.M())
+            
+            fastmtt.run(tau_pair, metx[i], mety[i], metcov, True) # constrained
+            tt_cons = fastmtt.getBestP4()
+            tt_cons_p4 = ROOT.TLorentzVector()
+            tt_cons_p4.SetPtEtaPhiM(tt_cons.Pt(), tt_cons.Eta(),
+                                    tt_cons.Phi(), tt_cons.M())
+
+            tt_corr_masses[i] = tt_corr_p4.M()
+            tt_cons_masses[i] = tt_cons_p4.M()
+
             l1, l2 = ROOT.TLorentzVector(), ROOT.TLorentzVector()
             l1.SetPtEtaPhiM(l1_p4_array[i].pt, l1_p4_array[i].eta,
                             l1_p4_array[i].phi, l1_p4_array[i].mass)
             l2.SetPtEtaPhiM(l2_p4_array[i].pt, l2_p4_array[i].eta,
                             l2_p4_array[i].phi, l2_p4_array[i].mass)
-            A_p4 = (l1 + l2 + tt_p4)
-            A_masses[i] = A_p4.M()
+            A_corr_p4 = (l1 + l2 + tt_corr_p4)
+            A_cons_p4 = (l1 + l2 + tt_cons_p4)
+            A_corr_masses[i] = A_corr_p4.M()
+            A_cons_masses[i] = A_cons_p4.M()
             
-        return tt_masses, A_masses
+        return tt_corr_masses, tt_cons_masses, A_corr_masses, A_cons_masses
+
+    def check_princeton_exclusive_loose(self, loose_electrons, loose_muons, loose_taus):
+        for i in range(len(self.princeton_exclusive)):
+            #test_run = self.princeton_exclusive[i,1]
+            #test_lumi = self.princeton_exclusive[i,2]
+            test_evt = self.princeton_exclusive[i]
+            test_mask = (self.event_ids['evt'].to_numpy() == test_evt)# &
+                         #(self.event_ids['lumi'].to_numpy() == test_lumi) &
+                         #(self.event_ids['run'].to_numpy() == test_run))
+            
+            e = loose_electrons[test_mask]
+            m = loose_muons[test_mask]
+            t = loose_taus[test_mask]
+            if (len(e) > 0):
+                #print("----- (run={}, lumi={}, evt={}) -----"
+                #      .format(test_run, test_lumi, test_evt))
+                print("----- (evt={}) -----"
+                      .format(test_evt))
+                print("--> e: pt={}".format(e.pt))
+                print("       eta={}".format(e.eta))
+                print("       phi={}".format(e.phi))
+                print("       mass={}".format(e.mass))
+                print("       mvaFall17V2noIso_WP90={}".format(e.mvaFall17V2noIso_WP90))
+                print("       lostHits={}, convVeto={}".format(e.lostHits, e.convVeto))
+                print("--> m: pt={}".format(m.pt))
+                print("       eta={}".format(m.eta))
+                print("       phi={}".format(m.phi))
+                print("       mass={}".format(m.mass))
+                print("       isTracker={}, isGlobal={}"
+                      .format(m.isTracker, m.isGlobal))
+                print("       looseId={}, mediumId={}, tightId={}"
+                      .format(m.looseId, m.mediumId, m.tightId))
+                print("--> t: pt={}".format(t.pt))
+                print("       eta={}".format(t.eta))
+                print("       phi={}".format(t.phi))
+                print("       mass={}".format(t.mass))
+                print("       rawDeepTau2017v2p1VSe={}".format(t.rawDeepTau2017v2p1VSe))
+                print("       rawDeepTau2017v2p1VSmu={}".format(t.rawDeepTau2017v2p1VSmu))
+                print("       rawDeepTau2017v2p1VSjet={}".format(t.rawDeepTau2017v2p1VSjet))
+                print("       decayMode={}, idDecayModeNewDMs={}"
+                      .format(t.decayMode, t.idDecayModeNewDMs))
+                
+    def check_princeton_exclusive_fs(self, lltt):
+        for i in range(len(self.princeton_exclusive)):
+            #test_run = self.princeton_exclusive[i,1]
+            #test_lumi = self.princeton_exclusive[i,2]
+            test_evt = self.princeton_exclusive[i]
+            test_mask = (self.evt_ids['evt'].to_numpy() == test_evt) #&
+                         #(self.evt_ids['lumi'].to_numpy() == test_lumi) &
+                         #(self.evt_ids['run'].to_numpy() == test_run))
+            
+            test_4l = lltt[test_mask]
+            if (len(test_4l) > 0):
+                #print(" SELECTED: (run={}, lumi={}, evt={})"
+                #      .format(test_run, test_lumi, test_evt))
+                print("SELECTED: evt={}"
+                      .format(test_evt))
+                print("--> e1: p4=({}, {}, {}, {})"
+                      .format(test_4l.i0.pt, test_4l.i0.eta,
+                              test_4l.i0.phi, test_4l.i0.mass))
+                print("        mvaFall17V2noIso_WP90={}"
+                      .format(test_4l.i0.mvaFall17V2noIso_WP90))
+                print("        lostHits={}, convVeto={}"
+                          .format(test_4l.i0.lostHits, test_4l.i0.convVeto))
+                print("--> e2: p4=({}, {}, {}, {})"
+                      .format(test_4l.i1.pt, test_4l.i1.eta,
+                              test_4l.i1.phi, test_4l.i1.mass))
+                print("        mvaFall17V2noIso_WP90={}"
+                      .format(test_4l.i1.mvaFall17V2noIso_WP90))
+                print("        lostHits={}, _convVeto={}"
+                      .format(test_4l.i1.lostHits, test_4l.i1.convVeto))
+                print("--> tau(mu): p4=({}, {}, {}, {})"
+                      .format(test_4l.i2.pt, test_4l.i2.eta,
+                              test_4l.i2.phi, test_4l.i2.mass))
+                print("             isTracker={}, isGlobal={}"
+                      .format(test_4l.i2.isTracker, test_4l.i2.isGlobal))
+                print("             looseId={}, mediumId={}, tightId={}"
+                      .format(test_4l.i2.looseId, test_4l.i2.mediumId, test_4l.i2.tightId))
+                print("--> tau(had): p4=({}, {}, {}, {})"
+                      .format(test_4l.i3.pt, test_4l.i3.eta,
+                              test_4l.i3.phi, test_4l.i3.mass))
+                print("              rawDeepTau2017v2p1VSe={}"
+                      .format(test_4l.i3.rawDeepTau2017v2p1VSe))
+                print("              rawDeepTau2017v2p1VSmu={}"
+                      .format(test_4l.i3.rawDeepTau2017v2p1VSmu))
+                print("              rawDeepTau2017v2p1VSjet={}"
+                      .format(test_4l.i3.rawDeepTau2017v2p1VSjet))
+                print("              decayMode={}, idDecayModeNewDMs={}"
+                      .format(test_4l.i3.decayMode, test_4l.i3.idDecayModeNewDMs))
+                
 
     ###############
     ## PROCESSOR ##
@@ -524,15 +607,18 @@ class SignalProcessor(processor.ProcessorABC):
                       flags.HBHENoiseIsoFilter &
                       flags.EcalDeadCellTriggerPrimitiveFilter &
                       flags.BadPFMuonFilter & flags.ecalBadCalibFilter)
-
-        # calculate the trigger_path
-        HLT = events.HLT
-        trigger_path = self.trigger_path(HLT, year, sync=self.sync)
+        
+        # calculate PV quality filter
+        pv = events.PV
+        pv_filter = ((pv.ndof > 4) &
+                     (abs(pv.z) < 24) & 
+                     (np.sqrt(pv.x**2 + pv.y**2) < 2))
         
         # apply filters
-        events = events[MET_filter & trigger_path]
-        self.event_ids = self.event_ids[MET_filter & trigger_path]
-        self.fill_cutflow('trigger path', len(events),
+        events = events[MET_filter & pv_filter]
+        self.event_ids = self.event_ids[MET_filter & 
+                                        pv_filter]
+        self.fill_cutflow('MET, pv filters', len(events),
                           N_sync = self.check_events(self.event_ids))
 
         ######################
@@ -546,6 +632,9 @@ class SignalProcessor(processor.ProcessorABC):
         loose_bjets = self.loose_bjet_selections(events.Jet, year)
         MET = events.MET
         trigger_objects = events.TrigObj
+        
+        #if category=='eemt':
+        #    self.check_princeton_exclusive_loose(loose_electrons, loose_muons, loose_taus)
 
         # count electrons minus overlapped objects
         electron_counts = self.count_non_overlapped(loose_electrons)
@@ -562,9 +651,13 @@ class SignalProcessor(processor.ProcessorABC):
         ## SELECTIONS (per category) ##
         ###############################
         for c, category in self.categories.items():
+            # identify correct trigger path
+            HLT = events.HLT
+            trigger_path = self.trigger_path(HLT, year, category, sync=self.sync)
 
             # n_leptons veto 
             n_lepton_mask = self.n_lepton_veto(electron_counts, muon_counts, category)
+            n_lepton_mask = n_lepton_mask & trigger_path # combine with trigger path
             jets, bjets = loose_jets[n_lepton_mask], loose_bjets[n_lepton_mask]
             self.met = MET[n_lepton_mask]
             trig_obj = trigger_objects[n_lepton_mask]
@@ -598,7 +691,7 @@ class SignalProcessor(processor.ProcessorABC):
             self.met = self.met[lltt.counts>0]
             lltt = lltt[lltt.counts>0]
             mll, mtt, m4l = self.get_masses(lltt, cutflow=True)
-            msv, mA = self.run_fastmtt(lltt, self.met, category)
+            msv, msv_cons, mA_corr, mA_cons = self.run_fastmtt(lltt, self.met, category)
 
             #################
             ## FILL HISTOS ##
@@ -606,60 +699,44 @@ class SignalProcessor(processor.ProcessorABC):
             self.output["evt"] += processor.column_accumulator(self.evt_ids['evt'].to_numpy()) 
             self.output["lumi"] += processor.column_accumulator(self.evt_ids['lumi'].to_numpy())
             self.output["run"] += processor.column_accumulator(self.evt_ids['run'].to_numpy())
-            
-            pt1, pt2 = lltt.i0.pt.flatten(), lltt.i1.pt.flatten()
-            pt3, pt4 = lltt.i2.pt.flatten(), lltt.i3.pt.flatten()
-            self.output["l1_pt"] += processor.column_accumulator(pt1)
-            self.output["l2_pt"] += processor.column_accumulator(pt2)
-            self.output["t1_pt"] += processor.column_accumulator(pt3)
-            self.output["t2_pt"] += processor.column_accumulator(pt4)
+            self.output["cat"] += processor.column_accumulator(np.array([category 
+                                                                         for _ in range(len(self.evt_ids))]))
 
-            eta1, eta2 = lltt.i0.eta.flatten(), lltt.i1.eta.flatten()
-            eta3, eta4 = lltt.i2.eta.flatten(), lltt.i3.eta.flatten()
-            self.output["l1_eta"] += processor.column_accumulator(ak.to_numpy(eta1))
-            self.output["l2_eta"] += processor.column_accumulator(ak.to_numpy(eta2))
-            self.output["t1_eta"] += processor.column_accumulator(ak.to_numpy(eta3))
-            self.output["t2_eta"] += processor.column_accumulator(ak.to_numpy(eta4))
+            if category=='eemt':
+                self.check_princeton_exclusive_fs(lltt)
             
-            phi1, phi2 = lltt.i0.phi.flatten(), lltt.i1.phi.flatten()
-            phi3, phi4 = lltt.i2.phi.flatten(), lltt.i3.phi.flatten()
-            self.output["l1_phi"] += processor.column_accumulator(ak.to_numpy(phi1))
-            self.output["l2_phi"] += processor.column_accumulator(ak.to_numpy(phi2))
-            self.output["t1_phi"] += processor.column_accumulator(ak.to_numpy(phi3))
-            self.output["t2_phi"] += processor.column_accumulator(ak.to_numpy(phi4))
-
-            mass3, mass4 = lltt.i2.mass.flatten(), lltt.i3.mass.flatten()
-            self.output["t1_mass"] += processor.column_accumulator(ak.to_numpy(mass3))
-            self.output["t2_mass"] += processor.column_accumulator(ak.to_numpy(mass4))
+            pts = [lltt.i0.pt.flatten(), lltt.i1.pt.flatten(),
+                   lltt.i2.pt.flatten(), lltt.i3.pt.flatten()]
+            etas = [lltt.i0.eta.flatten(), lltt.i1.eta.flatten(),
+                    lltt.i2.eta.flatten(), lltt.i3.eta.flatten()]
+            phis = [lltt.i0.phi.flatten(), lltt.i1.phi.flatten(),
+                    lltt.i2.phi.flatten(), lltt.i3.phi.flatten()]
+            particle_nums = ["$l_1$", "$l_2$", "$t_1$", "$t_2$"]
+            for i, pnum in enumerate(particle_nums):
+                
+                self.output["pt"].fill(dataset=self.dataset, category=category, pt=pts[i], 
+                                       particle=pnum, weight=sample_weight*np.ones(len(pts[i])))
+                self.output["eta"].fill(dataset=self.dataset, category=category, eta=etas[i], 
+                                        particle=pnum, weight=sample_weight*np.ones(len(etas[i])))
+                self.output["phi"].fill(dataset=self.dataset, category=category, phi=phis[i],
+                                        particle=pnum, weight=sample_weight*np.ones(len(phis[i])))
             
-            self.output["METx"] += processor.column_accumulator(ak.to_numpy((self.met.pt*np.cos(self.met.phi)).flatten()))
-            self.output["METy"] += processor.column_accumulator(ak.to_numpy((self.met.pt*np.sin(self.met.phi)).flatten()))
-            self.output["METcov_00"] += processor.column_accumulator(ak.to_numpy(self.met.covXX.flatten()))
-            self.output["METcov_01"] += processor.column_accumulator(ak.to_numpy(self.met.covXY.flatten()))
-            self.output["METcov_10"] += processor.column_accumulator(ak.to_numpy(self.met.covXY.flatten()))
-            self.output["METcov_11"] += processor.column_accumulator(ak.to_numpy(self.met.covYY.flatten()))
-            self.output["category"] += processor.column_accumulator(c * np.ones(len(pt1)) )
-
-            self.output["pt1"].fill(dataset=self.dataset, category=category, pt1=pt1, weight=sample_weight*np.ones(len(pt1)))
-            self.output["pt2"].fill(dataset=self.dataset, category=category, pt2=pt2, weight=sample_weight*np.ones(len(pt2)))
-            self.output["pt3"].fill(dataset=self.dataset, category=category, pt3=pt3, weight=sample_weight*np.ones(len(pt3)))
-            self.output["pt4"].fill(dataset=self.dataset, category=category, pt4=pt4, weight=sample_weight*np.ones(len(pt4)))
+            if (category[:2]=='mm'): self.output["m_mumu"] += processor.column_accumulator(np.array(mll.flatten()))
+            self.output["mll_array"] += processor.column_accumulator(np.array(mll.flatten()))
+            self.output["msv_cons_array"] += processor.column_accumulator(np.array(msv_cons.flatten()))
             
-            self.output["eta1"].fill(dataset=self.dataset, category=category, eta1=eta1, weight=sample_weight*np.ones(len(eta1)))
-            self.output["eta2"].fill(dataset=self.dataset, category=category, eta2=eta2, weight=sample_weight*np.ones(len(eta2)))
-            self.output["eta3"].fill(dataset=self.dataset, category=category, eta3=eta3, weight=sample_weight*np.ones(len(eta3)))
-            self.output["eta4"].fill(dataset=self.dataset, category=category, eta4=eta4, weight=sample_weight*np.ones(len(eta4)))
-             
-            self.output["phi1"].fill(dataset=self.dataset, category=category, phi1=phi1, weight=sample_weight*np.ones(len(phi1)))
-            self.output["phi2"].fill(dataset=self.dataset, category=category, phi2=phi2, weight=sample_weight*np.ones(len(phi2)))
-            self.output["phi3"].fill(dataset=self.dataset, category=category, phi3=phi3, weight=sample_weight*np.ones(len(phi3)))
-            self.output["phi4"].fill(dataset=self.dataset, category=category, phi4=phi4, weight=sample_weight*np.ones(len(phi4)))
-            
-            self.output["mll"].fill(dataset=self.dataset, category=category, mll=mll.flatten(), weight=sample_weight*np.ones(len(mll.flatten())))
-            self.output["mtt"].fill(dataset=self.dataset, category=category, mtt=mtt.flatten(), weight=sample_weight*np.ones(len(mtt.flatten())))
-            self.output["m4l"].fill(dataset=self.dataset, category=category, m4l=m4l.flatten(), weight=sample_weight*np.ones(len(m4l.flatten())))
-            self.output["msv"].fill(dataset=self.dataset, category=category, msv=msv.flatten(), weight=sample_weight*np.ones(len(msv.flatten())))
-            self.output["mA"].fill(dataset=self.dataset, category=category, mA=mA.flatten(),weight=sample_weight*np.ones(len(mA.flatten())))
+            self.output["mll"].fill(dataset=self.dataset, category=category, mll=mll.flatten(), 
+                                    weight=sample_weight*np.ones(len(mll.flatten())))
+            self.output["mtt"].fill(dataset=self.dataset, category=category, mass_type="$m_{tt}$", 
+                                    mtt=mtt.flatten(), weight=sample_weight*np.ones(len(mtt.flatten())))
+            self.output["mtt"].fill(dataset=self.dataset, category=category, mass_type="$m_{fastmtt}$", 
+                                    mtt=msv.flatten(), weight=sample_weight*np.ones(len(msv.flatten())))
+            self.output["m4l"].fill(dataset=self.dataset, category=category, mass_type='$m_{4l}$', 
+                                    mA=m4l.flatten())
+            self.output["m4l"].fill(dataset=self.dataset, category=category, mass_type='$m_A^{corr}$', 
+                                    mA=mA_corr.flatten())
+            self.output["m4l"].fill(dataset=self.dataset, category=category, mass_type='$m_A^{cons}$', 
+                                    mA=mA_cons.flatten())
 
             #nbtag = good_bjets.counts.flatten()
             #output["nbtag"].fill(dataset=dataset, category=category, nbtag=nbtag, weight=sample_weight*np.ones(len(nbtag)))

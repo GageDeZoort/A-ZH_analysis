@@ -321,7 +321,7 @@ bool FastMTT::compareLeptons(const classic_svFit::MeasuredTauLepton& measuredTau
 ///////////////////////////////////////////////////////////////////
 void FastMTT::run(const std::vector<classic_svFit::MeasuredTauLepton>& measuredTauLeptons,
 		  const double & measuredMETx, const double & measuredMETy,
-		  const TMatrixD& covMET){
+		  const TMatrixD& covMET, bool constrain){
 
   bestP4 = LorentzVector();  
   ////////////////////////////////////////////
@@ -351,7 +351,7 @@ void FastMTT::run(const std::vector<classic_svFit::MeasuredTauLepton>& measuredT
 
   myLikelihood.setMETInputs(aMET, covMET);
 
-  scan();
+  scan(constrain);
   //minimize();
 
   tau1P4 = aLepton1.p4()*(1.0/minimumPosition[0]);
@@ -402,7 +402,7 @@ void FastMTT::minimize(){
 }
 ///////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////
-void FastMTT::scan(){
+void FastMTT::scan(bool constrain){
 
   clock.Reset();
   clock.Start("scan");
@@ -422,8 +422,12 @@ void FastMTT::scan(){
       LorentzVector tau1P4_tmp = myLikelihood.getLeg1P4()*(1.0/x[0]);
       LorentzVector tau2P4_tmp = myLikelihood.getLeg2P4()*(1.0/x[1]);
       LorentzVector diTauP4_tmp = tau1P4_tmp + tau2P4_tmp;
-      if (diTauP4_tmp.M() < 124.5 || diTauP4_tmp.M() > 125.5) continue;
       
+      // mass constraint
+      if (constrain) {
+	if (diTauP4_tmp.M() < 124.9 || diTauP4_tmp.M() > 125.1) continue;
+      }
+
       //cout << "Considering M=" << diTauP4_tmp.M() << endl;
       lh = myLikelihood.value(x);      
 
